@@ -1,0 +1,40 @@
+import pandas as pd
+import ast
+from app.database import manga_collection
+
+async def load_manga_from_excel(file_path: str):
+    df = pd.read_excel(file_path)
+    
+    # Helper functions
+    def parse_int(value):
+        if pd.isna(value):
+            return None
+        return int(str(value).replace(",", "").strip())
+
+    def parse_list(value):
+        try:
+            return ast.literal_eval(value) if isinstance(value, str) else []
+        except:
+            return []
+
+    # Cleaning columns
+    df["Members"] = df["Members"].apply(parse_int)
+    df["Favorite"] = df["Favorite"].apply(parse_int)
+    df["Popularity"] = df["Popularity"].apply(parse_int)
+    df["Genres"] = df["Genres"].apply(parse_list)
+    df["Themes"] = df["Themes"].apply(parse_list)
+    df["Demographic"] = df["Demographic"].apply(parse_list)
+
+    records = df.to_dict(orient="records")
+
+    inserted_count = 0
+    for record in records:
+        result = await manga_collection.update_one(
+            {"Title": record["Title"]},
+            {"$set": record},
+            upsert=True
+        )
+        if result.upserted_id:
+            inserted_count += 1
+    
+    return {"inserted": inserted_count, "total_processed": len(records)}
